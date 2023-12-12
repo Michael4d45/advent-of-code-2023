@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 fn main() {
     let input = include_str!("./input.txt");
     let output = process(input);
@@ -109,7 +107,7 @@ For each row, count all of the different arrangements of operational and broken 
 What is the sum of those counts?
 
 */
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum Spring {
     Operational,
     Broken,
@@ -153,13 +151,78 @@ fn get_row(input: &str) -> Row {
 fn process(input: &str) -> String {
     let rows = input.lines().map(get_row);
 
-    dbg!(rows.collect::<Vec<_>>());
+    // dbg!(rows.map(get_count).collect::<Vec<_>>());
 
-    return 0.to_string();
+    return rows.map(get_count).sum::<usize>().to_string();
+}
+
+fn get_spring_groups(springs: &Vec<Spring>, check_spring: Spring) -> Vec<Vec<Spring>> {
+    let mut cur_groups: Vec<Vec<Spring>> = vec![];
+    let mut temp_group = vec![];
+    for &spring in springs {
+        if spring == check_spring {
+            if let Some(&last) = temp_group.last() {
+                if spring == last {
+                    temp_group.push(spring);
+                } else {
+                    cur_groups.push(temp_group.clone());
+                    temp_group.clear();
+                    temp_group.push(spring);
+                }
+            } else {
+                temp_group.push(spring);
+            }
+        } else if !temp_group.is_empty() {
+            cur_groups.push(temp_group.clone());
+            temp_group.clear();
+        }
+    }
+    if !temp_group.is_empty() {
+        cur_groups.push(temp_group);
+    }
+
+    cur_groups
+}
+
+fn satisfies(check_springs: &Vec<Spring>, broken_groups: &Vec<usize>) -> bool {
+    let springs: Vec<Vec<Spring>> = get_spring_groups(check_springs, Spring::Broken);
+    // dbg!(springs.len(), broken_groups.len());
+    if springs.len() != broken_groups.len() {
+        return false;
+    }
+
+    // dbg!(&springs);
+
+    springs
+        .iter()
+        .zip(broken_groups)
+        .all(|(spring_group, &count)| spring_group.len() == count)
+}
+
+fn traverse(springs: &Vec<Spring>, groups: &Vec<usize>, count: usize) -> usize {
+    // dbg!(springs);
+
+    if satisfies(springs, groups) {
+        count + 1
+    } else {
+        for (i, &spring) in springs.iter().enumerate() {
+            if spring == Spring::Unknown {
+                let mut operational_springs = springs.clone();
+                operational_springs[i] = Spring::Operational;
+                let mut broken_springs = springs.clone();
+                broken_springs[i] = Spring::Broken;
+
+                let count_operational = traverse(&operational_springs, groups, 0);
+                let count_broken = traverse(&broken_springs, groups, 0);
+                return count + count_operational + count_broken;
+            }
+        }
+        count
+    }
 }
 
 fn get_count(row: Row) -> usize {
-    todo!();
+    traverse(&row.springs, &row.broken_groups, 0)
 }
 
 #[cfg(test)]
@@ -181,16 +244,16 @@ mod tests {
         assert_eq!(result, output);
     }
 
-    #[test]
-    fn it_works() {
-        let result = process(
-            "???.### 1,1,3
+        #[test]
+        fn it_works() {
+            let result = process(
+                "???.### 1,1,3
 .??..??...?##. 1,1,3
 ?#?#?#?#?#?#?#? 1,3,1,6
 ????.#...#... 4,1,1
 ????.######..#####. 1,6,5
 ?###???????? 3,2,1",
-        );
-        assert_eq!(result, "21".to_string());
-    }
+            );
+            assert_eq!(result, "21".to_string());
+        }
 }
