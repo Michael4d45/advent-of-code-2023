@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 fn main() {
     let input = include_str!("./input.txt");
@@ -128,43 +128,44 @@ Expand the universe, then find the length of the shortest path between every pai
 What is the sum of these lengths?
 
 */
-#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug)]
 struct Pos {
-    id: u32,
+    _id: u32,
     x: usize,
     y: usize,
 }
 
-#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug)]
 struct Pair {
     pos1: Pos,
     pos2: Pos,
-    empty_x: u32,
-    empty_y: u32,
+    empty_x: usize,
+    empty_y: usize,
 }
 
-fn get_galaxies(input: &str) -> HashSet<Pair> {
+fn get_galaxies(input: &str) -> Vec<Pair> {
     let mut count = 0;
-    let mut galaxy_pairs = HashSet::new();
-    let mut galaxy_set: HashSet<Pos> = HashSet::new();
+    let mut galaxy_pairs = vec![];
+    let mut galaxy_set: Vec<Pos> = vec![];
     let mut has_xs = HashSet::new();
     let mut empty_ys = HashSet::new();
+    let mut empty_xs = HashSet::new();
     for (y, line) in input.lines().enumerate() {
         let mut is_empty = true;
         for (x, c) in line.char_indices() {
             if c == '#' {
                 is_empty = false;
                 count += 1;
-                let pos = Pos { x, y, id: count };
+                let pos = Pos { x, y, _id: count };
                 for galaxy in &galaxy_set {
-                    galaxy_pairs.insert(Pair {
+                    galaxy_pairs.push(Pair {
                         pos1: pos,
                         pos2: galaxy.clone(),
                         empty_x: 0,
                         empty_y: 0,
                     });
                 }
-                galaxy_set.insert(pos);
+                galaxy_set.push(pos);
                 has_xs.insert(x);
             }
         }
@@ -174,16 +175,72 @@ fn get_galaxies(input: &str) -> HashSet<Pair> {
     }
 
     for x in 0..*has_xs.iter().max().unwrap() {
-        dbg!(x);
+        if !has_xs.contains(&x) {
+            empty_xs.insert(x);
+        }
     }
 
     galaxy_pairs
+        .iter()
+        .map(|pair| {
+            let bigger_x = pair.pos1.x.max(pair.pos2.x);
+            let smaller_x = pair.pos1.x.min(pair.pos2.x);
+            let empty_x = empty_xs
+                .iter()
+                .filter(|&x| x < &bigger_x && x > &smaller_x)
+                .collect::<Vec<_>>()
+                .len();
+            let bigger_y = pair.pos1.y.max(pair.pos2.y);
+            let smaller_y = pair.pos1.y.min(pair.pos2.y);
+            let empty_y = empty_ys
+                .iter()
+                .filter(|&y| y < &bigger_y && y > &smaller_y)
+                .collect::<Vec<_>>()
+                .len();
+            Pair {
+                pos2: pair.pos1,
+                pos1: pair.pos2,
+                empty_x,
+                empty_y,
+            }
+        })
+        .collect()
+}
+
+fn get_distance(pair: Pair, expansion: usize) -> usize {
+    let p1x = pair.pos1.x as f64;
+    let p1y = pair.pos1.y as f64;
+    let p2x = pair.pos2.x as f64;
+    let p2y = pair.pos2.y as f64;
+
+    let x_expansion = (pair.empty_x * (expansion - 1)) as f64;
+    let y_expansion = (pair.empty_y * (expansion - 1)) as f64;
+
+    let x_diff = (p1x - p2x).abs() + x_expansion;
+    let y_diff = (p1y - p2y).abs() + y_expansion;
+
+    let h = x_diff + y_diff;
+
+    if pair.pos1._id == 5 && pair.pos2._id == 9 {
+        dbg!(pair, h, x_expansion, y_expansion, x_diff, y_diff);
+    }
+
+    h as usize
 }
 
 fn process(input: &str) -> String {
-    let galaxies = get_galaxies(input);
+    let galaxy_pairs = get_galaxies(input);
 
-    return 0.to_string();
+    let expansion = 2;
+
+    dbg!(&galaxy_pairs.len());
+
+    let result: usize = galaxy_pairs
+        .iter()
+        .map(|&pair| get_distance(pair, expansion))
+        .sum();
+
+    return result.to_string();
 }
 
 #[cfg(test)]
