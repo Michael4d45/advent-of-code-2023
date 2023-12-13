@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 fn main() {
     let input = include_str!("./input.txt");
     let output = process(input);
-    dbg!(output);
+    // dbg!(output);
 }
 
 /**
@@ -102,10 +104,10 @@ fn get_row(input: &str) -> Row {
         .collect::<Vec<_>>();
 
     Row {
-        // springs: multiply_spring(springs),
-        // broken_groups: multiply_groups(broken_groups),
-        springs,
-        broken_groups,
+        springs: multiply_spring(springs),
+        broken_groups: multiply_groups(broken_groups),
+        // springs,
+        // broken_groups,
     }
 }
 
@@ -117,12 +119,12 @@ fn process(input: &str) -> String {
     return rows.map(get_count).sum::<usize>().to_string();
 }
 
-fn get_spring_groups(springs: &Vec<Spring>) -> Vec<Vec<Spring>> {
-    let mut cur_groups: Vec<Vec<Spring>> = vec![];
+fn get_spring_groups(springs: &Vec<Spring>) -> Vec<Vec<(usize, Spring)>> {
+    let mut cur_groups = vec![];
     let mut temp_group = vec![];
-    for &spring in springs {
+    for (i, &spring) in springs.iter().enumerate() {
         if spring == Spring::Broken || spring == Spring::Unknown {
-            temp_group.push(spring);
+            temp_group.push((i, spring));
         } else if !temp_group.is_empty() {
             cur_groups.push(temp_group.clone());
             temp_group.clear();
@@ -135,82 +137,190 @@ fn get_spring_groups(springs: &Vec<Spring>) -> Vec<Vec<Spring>> {
     cur_groups
 }
 
-fn get_broken_spring_groups(springs: &Vec<Spring>) -> Vec<Vec<Spring>> {
-    let mut cur_groups: Vec<Vec<Spring>> = vec![];
-    let mut temp_group = vec![];
-    for &spring in springs {
-        if spring == Spring::Broken {
-            temp_group.push(spring);
-        } else if !temp_group.is_empty() {
-            cur_groups.push(temp_group.clone());
-            temp_group.clear();
-        }
-    }
-    if !temp_group.is_empty() {
-        cur_groups.push(temp_group);
-    }
-
-    cur_groups
-}
-
-fn satisfies(
-    check_springs: &Vec<Spring>,
-    broken_groups: &Vec<usize>,
-    get_groups: fn(&Vec<Spring>) -> Vec<Vec<Spring>>,
-) -> bool {
-    let springs: Vec<Vec<Spring>> = get_groups(check_springs);
-    // dbg!(springs.len(), broken_groups.len());
-    if springs.len() != broken_groups.len() {
-        return false;
-    }
-
-    // dbg!(&springs);
-
-    springs
-        .iter()
-        .zip(broken_groups)
-        .all(|(spring_group, &count)| spring_group.len() == count)
-}
-
-// fn traverse_groups(groups: &Vec<Vec<Spring>>, broken_groups: &Vec<usize>) -> Vec<Vec<Spring>> {
-//     if groups.len() == broken_groups.len() {
-//         return groups.clone();
-//     };
-
-//     for i in 0..groups.len() {
-//         let count = broken_groups[i];
-//         let unknown_count = groups[i]
-//             .iter()
-//             .filter(|&&spring| spring == Spring::Unknown)
-//             .collect::<Vec<_>>()
-//             .len();
-//         let broken_count = groups[i]
-//             .iter()
-//             .filter(|&&spring| spring == Spring::Broken)
-//             .collect::<Vec<_>>()
-//             .len();
-
+// fn get_broken_spring_groups(springs: &Vec<Spring>) -> Vec<Vec<Spring>> {
+//     let mut cur_groups: Vec<Vec<Spring>> = vec![];
+//     let mut temp_group = vec![];
+//     for &spring in springs {
+//         if spring == Spring::Broken {
+//             temp_group.push(spring);
+//         } else if !temp_group.is_empty() {
+//             cur_groups.push(temp_group.clone());
+//             temp_group.clear();
+//         }
+//     }
+//     if !temp_group.is_empty() {
+//         cur_groups.push(temp_group);
 //     }
 
-//     groups.clone()
+//     cur_groups
 // }
 
-fn get_count(row: Row) -> usize {
-    let total_broken_count = row.broken_groups.iter().sum::<usize>();
-    let have_total = row.springs.iter().fold(
+// fn satisfies(broken_groups: &Vec<usize>, springs: Vec<Vec<Spring>>) -> bool {
+//     // dbg!(springs.len(), broken_groups.len());
+//     if springs.len() != broken_groups.len() {
+//         return false;
+//     }
+
+//     // dbg!(&springs);
+
+//     springs
+//         .iter()
+//         .zip(broken_groups)
+//         .all(|(spring_group, &count)| spring_group.len() == count)
+// }
+
+fn get_counts(springs: &Vec<(usize, Spring)>) -> (usize, usize, usize) {
+    springs.iter().fold(
         (0, 0, 0),
-        |(operational, broken, unknown), &spring| match spring {
+        |(operational, broken, unknown), &(_, spring)| match spring {
             Spring::Operational => (operational + 1, broken, unknown),
             Spring::Broken => (operational, broken + 1, unknown),
             Spring::Unknown => (operational, broken, unknown + 1),
         },
-    );
-    dbg!(have_total);
+    )
+}
+
+fn get_count(row: Row) -> usize {
+    // let have_total = get_counts(&row.springs);
+    // dbg!(have_total);
+
     let groups = get_spring_groups(&row.springs);
 
-    dbg!(&groups);
+    // dbg!(&groups, &groups.len(), row.broken_groups.len());
 
-    // for group in groups {}
+    let mut all_test_groups = vec![groups.clone()];
+    let mut finished_test_group = HashMap::new();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        while let Some(groups) = all_test_groups.pop() {
+            // dbg!(all_test_groups.len());
+            let group_diff = row.broken_groups.len() - groups.len();
+            if group_diff > 0 {
+                for (i, springs) in groups.iter().enumerate() {
+                    let (first_part_of_group, after) = groups.split_at(i);
+                    let second_part_of_group = &after[1..];
+                    // dbg!(first_part_of_group, second_part_of_group);
+                    let count = row.broken_groups[i];
+                    // dbg!(count, springs.len());
+                    let poses = springs
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(pos, &(_, spring))| {
+                            (spring == Spring::Unknown).then_some(pos)
+                        })
+                        .collect::<Vec<_>>();
+                    if poses.len() > 0 && springs.len() > count {
+                        let mut next_count = springs.len();
+                        if i + 1 < row.broken_groups.len() {
+                            // dbg!(next_count, row.broken_groups[i + 1]);
+                            if row.broken_groups[i + 1] > next_count {
+                                continue;
+                            }
+                            next_count -= row.broken_groups[i + 1];
+                        }
+                        for j in count..next_count {
+                            if poses.contains(&j) {
+                                let (before, after) = springs.split_at(j);
+                                let before = before.iter().map(|&s| s).collect::<Vec<_>>();
+                                let after = after[1..].iter().map(|&s| s).collect::<Vec<_>>();
+                                let pushing: Vec<Vec<(usize, Spring)>> = [
+                                    first_part_of_group,
+                                    &[before.clone()],
+                                    &[after.clone()],
+                                    second_part_of_group,
+                                ]
+                                .concat();
+                                if pushing[pushing.len() - 1].len()
+                                    >= *row.broken_groups.last().unwrap()
+                                {
+                                    if pushing.len() == row.broken_groups.len() {
+                                        let poses: Vec<Vec<usize>> = pushing
+                                            .iter()
+                                            .map(|v| v.iter().map(|&(i, _)| i).collect::<Vec<_>>())
+                                            .collect::<Vec<_>>();
+                                        // dbg!(&poses);
+                                        finished_test_group.insert(poses, pushing);
+                                    } else {
+                                        all_test_groups.push(pushing);
+                                    }
+                                }
+                                let (_, before_broken, _) = get_counts(&before);
+                                // let (_, after_broken, _) = get_counts(&after);
+                                if before_broken >= count {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                changed = true;
+            } else {
+                // panic!("wat here?");
+                finished_test_group.insert(vec![], groups.clone());
+            }
+        }
+    }
+    // dbg!(&finished_test_group.len());
+
+    println!("");
+
+    let mut all_total = 0;
+    for (_, groups) in finished_test_group {
+        let mut total = 1;
+        for (springs, &count) in groups.iter().zip(&row.broken_groups) {
+            let (_, broken, unknown) = get_counts(&springs);
+
+            if unknown == 0 && broken == count {
+                continue;
+            }
+
+            if broken > 0 {
+                let mut first = 0;
+                for i in 0..springs.len() {
+                    if springs[i].1 == Spring::Broken {
+                        first = i;
+                        break;
+                    }
+                }
+                let mut last = first;
+                for i in 0..springs.len() {
+                    last = springs.len() - i - 1;
+                    if springs[last].1 == Spring::Broken {
+                        break;
+                    }
+                }
+
+                let left_size = first;
+                let right_size = springs.len() - last - 1;
+                let min = left_size.min(right_size);
+
+                if min * 2 >= count {
+                    // dbg!(&groups, count, last, first);
+                    total *= count - (last - first);
+                } else {
+                    total *= 1 + min;
+                }
+            } else {
+                total *= 1 + springs.len() - count
+            }
+
+            // dbg!(springs.len(), count, total);
+        }
+        // dbg!(total);
+        all_total += total;
+    }
+
+    dbg!(all_total);
+
+    // for group in groups {
+    //     if group.contains(&Spring::Unknown) {
+    //       // dbg!(&group);
+    //         for (i, window) in group.windows(group.len() - 1).enumerate() {
+    //           // dbg!(i, &window);
+    //         }
+    //     }
+    // }
 
     // let count = traverse();
 
@@ -222,7 +332,7 @@ fn get_count(row: Row) -> usize {
 
     // dbg!(count, count_other);
 
-    0
+    all_total
 }
 
 #[cfg(test)]
@@ -232,12 +342,12 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case("???.### 1,1,3", 1)]
-    #[case(".??..??...?##. 1,1,3", 16384)]
+    // #[case("???.### 1,1,3", 1)]
+    // #[case(".??..??...?##. 1,1,3", 4)]
     // #[case("?#?#?#?#?#?#?#? 1,3,1,6", 1)]
-    // #[case("????.#...#... 4,1,1", 16)]
-    // #[case("????.######..#####. 1,6,5", 2500)]
-    // #[case("?###???????? 3,2,1", 506250)]
+    // #[case("????.#...#... 4,1,1", 1)]
+    // #[case("????.######..#####. 1,6,5", 4)]
+    #[case("?###???????? 3,2,1", 10)]
     #[test]
     fn get_count_works(#[case] input: &str, #[case] output: usize) {
         let result = get_count(get_row(input));
