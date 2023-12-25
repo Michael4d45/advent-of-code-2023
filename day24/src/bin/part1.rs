@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 fn main() {
     let input = include_str!("./input.txt");
-    let min_bound: isize = 200_000_000_000_000;
-    let max_bound: isize = 400_000_000_000_000;
+    let min_bound: f64 = 200_000_000_000_000.;
+    let max_bound: f64 = 400_000_000_000_000.;
 
     let output = process(input, min_bound, max_bound);
     dbg!(output);
@@ -104,35 +104,102 @@ future paths for intersections. How many of these intersections
 occur within the test area?
 
 */
+#[derive(Debug, Clone, Copy)]
 struct Vec3 {
-    x: isize,
-    y: isize,
-    z: isize,
+    x: f64,
+    y: f64,
+    z: f64,
 }
 
 struct Hail {
     // px py pz @ vx vy vz
     position: Vec3,
     velocity: Vec3,
+    m: f64,
+    b: f64,
 }
+
+#[derive(Debug)]
+struct Collision {
+    hail_a: usize,
+    hail_b: usize,
+    // time: f64,
+    collision: Vec3,
+}
+
 impl Hail {
     fn new(line: &str) -> Hail {
         let parts = line
             .split_whitespace()
-            .filter_map(|x| x.parse::<isize>().ok())
+            .filter_map(|x| x.parse::<f64>().ok())
             .collect::<Vec<_>>();
+        // dbg!(&parts);
+        let position = Vec3 {
+            x: parts[0],
+            y: parts[1],
+            z: parts[2],
+        };
+        let velocity = Vec3 {
+            x: parts[3],
+            y: parts[4],
+            z: parts[5],
+        };
+
+        // rise over run
+        let m = velocity.y / velocity.x;
+
+        // y = mx + b
+        // b = y - mx
+        let b = position.y - (m * position.x);
+
         Hail {
-            position: Vec3 {
-                x: parts[0],
-                y: parts[1],
-                z: parts[2],
-            },
-            velocity: Vec3 {
-                x: parts[3],
-                y: parts[4],
-                z: parts[5],
-            },
+            m,
+            b,
+            position,
+            velocity,
         }
+    }
+
+    fn is_after_x(&self, x: f64) -> bool {
+        if self.velocity.x > 0. {
+            self.position.x < x
+        } else if self.velocity.x < 0. {
+            self.position.x > x
+        } else {
+            println!("---Vertical");
+            true
+        }
+    }
+
+    fn get_collision(&self, other: &Hail, min: f64, max: f64) -> Option<Vec3> {
+        if other.m == self.m {
+            // println!("parallel m1:{}, m2:{}", self.m, other.m);
+            return None;
+        }
+        let x = (other.b - self.b) / (self.m - other.m);
+        if x <= min || x >= max {
+            // println!(
+            //     "out of bounds x1:{}, x2:{}, x:{x}",
+            //     self.position.x, other.position.x
+            // );
+            return None;
+        }
+        if !self.is_after_x(x) {
+            // println!(
+            //     "intersects before1 px:{}, vx:{}, x:{x}",
+            //     self.position.x, self.velocity.x
+            // );
+            return None;
+        }
+        if !other.is_after_x(x) {
+            // println!(
+            //     "intersects before2 px:{}, vx:{}, x:{x}",
+            //     other.position.x, other.velocity.x
+            // );
+            return None;
+        }
+        let y = self.m * x + self.b;
+        Some(Vec3 { x, y, z: 0. })
     }
 }
 
@@ -147,15 +214,30 @@ impl Storm {
         }
     }
 
-    fn get_collisions(&self) -> Vec<Vec3> {
-        todo!()
+    fn get_collisions(&mut self, min: f64, max: f64) -> Vec<Collision> {
+        let mut collisions = vec![];
+        for i in 0..self.hail.len() - 1 {
+            for j in i + 1..self.hail.len() {
+                let hail_a = &self.hail[i];
+                let hail_b = &self.hail[j];
+                if let Some(collision) = hail_a.get_collision(hail_b, min, max) {
+                    collisions.push(Collision {
+                        hail_a: i,
+                        hail_b: j,
+                        collision,
+                    });
+                }
+            }
+        }
+        collisions
     }
 }
 
-fn process(input: &str, min: isize, max: isize) -> String {
-    let storm = Storm::new(input);
-
-    return storm.get_collisions().len().to_string();
+fn process(input: &str, min: f64, max: f64) -> String {
+    let mut storm = Storm::new(input);
+    let collisions = storm.get_collisions(min, max);
+    // dbg!(&collisions);
+    return collisions.len().to_string();
 }
 
 #[cfg(test)]
@@ -165,7 +247,7 @@ mod tests {
     #[test]
     fn it_works() {
         let input = include_str!("./t1.txt");
-        let result = process(input, 7, 27);
-        assert_eq!(result, "2".to_string());
+        let result = process(input, 7., 27.);
+        assert_eq!(result, "_".to_string());
     }
 }
